@@ -1,0 +1,26 @@
+# Build artifacts
+/build/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IncludeOS specific
+*.img
+*.iso
+includeos-sample.bin
+includeos-sample
+
+# Bunny artifacts
+*.tar.gz
+*.cpio

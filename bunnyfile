@@ -1,0 +1,20 @@
+#syntax=harbor.nbfc.io/nubificus/bunny:latest
+version: v0.1
+
+platforms:
+  framework: includeos
+  monitor: qemu
+  architecture: x86
+
+kernel:
+  from: local
+  # IncludeOS bootloader (modify path as needed)
+  path: includeos-loader
+
+rootfs:
+  from: local
+  # Your compiled IncludeOS binary
+  path: includeos-sample
+  type: initrd
+
+cmd: []
