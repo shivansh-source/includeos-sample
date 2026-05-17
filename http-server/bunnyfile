@@ -1,0 +1,18 @@
+#syntax=harbor.nbfc.io/nubificus/bunny:latest
+version: v0.1
+
+platforms:
+  framework: includeos
+  monitor: qemu
+  architecture: x86
+
+kernel:
+  from: local
+  path: includeos-loader
+
+rootfs:
+  from: local
+  path: includeos-http-server
+  type: initrd
+
+cmd: []
