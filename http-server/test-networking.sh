@@ -1,28 +1,122 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-echo "=== Testing IncludeOS HTTP Server Networking ==="
+IMAGE=${IMAGE:-docker.io/shivansh1111/includeos-http-server:latest}
+CONTAINER_NAME=${CONTAINER_NAME:-includeos-http-server-nettest}
+NAMESPACE=${NAMESPACE:-k8s.io}
+RUNTIME=${RUNTIME:-io.containerd.urunc.v2}
+PORT=${PORT:-8080}
+STARTUP_TIMEOUT=${STARTUP_TIMEOUT:-30}
+CLIENT_IMAGE=${CLIENT_IMAGE:-docker.io/curlimages/curl:8.8.0}
+SUDO=${SUDO:-sudo}
 
-# Load image into containerd
-echo "1. Loading Docker image into containerd..."
-docker save shivansh1111/includeos-http-server:latest | sudo ctr -n k8s.io images import -
+cleanup() {
+    if command -v nerdctl >/dev/null 2>&1; then
+        ${SUDO} nerdctl -n "${NAMESPACE}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    fi
+    if command -v docker >/dev/null 2>&1; then
+        ${SUDO} docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
 
-# Start HTTP server container in background
-echo "2. Starting HTTP server (urunc QEMU)..."
-sudo ctr -n k8s.io run -d --runtime io.containerd.urunc.v2 docker.io/shivansh1111/includeos-http-server:latest server_test &
-sleep 3
+require_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "error: required command '$1' was not found" >&2
+        exit 1
+    fi
+}
 
-# Get container IP
-echo "3. Getting container IP..."
-SERVER_IP=$(sudo ctr -n k8s.io task ls | grep server_test | awk '{print $3}')
-echo "   Server IP: $SERVER_IP"
+http_get() {
+    local url=$1
 
-# Test with side container (busybox with curl)
-echo "4. Testing HTTP connectivity from side container..."
-sudo ctr -n k8s.io run --rm docker.io/library/busybox:latest side_test sh -c "wget -O - http://$SERVER_IP:8080 2>/dev/null"
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --silent --show-error --max-time 5 "${url}"
+        return
+    fi
 
-# Cleanup
-echo "5. Cleaning up..."
-sudo ctr -n k8s.io task kill server_test
-sudo ctr -n k8s.io container rm server_test
+    if command -v wget >/dev/null 2>&1; then
+        wget -qO- --timeout=5 "${url}"
+        return
+    fi
 
-echo "=== Test Complete ==="
+    require_command nerdctl
+    ${SUDO} nerdctl -n "${NAMESPACE}" run --rm "${CLIENT_IMAGE}" \
+        --fail --silent --show-error --max-time 5 "${url}"
+}
+
+wait_for_ip() {
+    local ip=""
+    for _ in $(seq 1 "${STARTUP_TIMEOUT}"); do
+        ip=$(${SUDO} nerdctl -n "${NAMESPACE}" inspect \
+            -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+            "${CONTAINER_NAME}" 2>/dev/null || true)
+        if [[ -n "${ip}" && "${ip}" != "<no value>" ]]; then
+            echo "${ip}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "error: timed out waiting for ${CONTAINER_NAME} to receive a CNI IP" >&2
+    return 1
+}
+
+wait_for_http() {
+    local url=$1
+    local body=""
+
+    for _ in $(seq 1 "${STARTUP_TIMEOUT}"); do
+        body=$(http_get "${url}" 2>/dev/null || true)
+        if [[ "${body}" == "Hello, world!" ]]; then
+            echo "${body}"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "error: timed out waiting for ${url} to return 'Hello, world!'" >&2
+    return 1
+}
+
+main() {
+    require_command nerdctl
+
+    echo "=== Testing IncludeOS HTTP Server Networking ==="
+    echo "Image:      ${IMAGE}"
+    echo "Namespace:  ${NAMESPACE}"
+    echo "Runtime:    ${RUNTIME}"
+    echo "Container:  ${CONTAINER_NAME}"
+    echo
+
+    cleanup
+
+    if command -v docker >/dev/null 2>&1 && ! ${SUDO} nerdctl -n "${NAMESPACE}" image inspect "${IMAGE}" >/dev/null 2>&1; then
+        echo "1. Importing Docker image into containerd namespace ${NAMESPACE}..."
+        docker save "${IMAGE}" | ${SUDO} nerdctl -n "${NAMESPACE}" load
+    else
+        echo "1. Image already available to nerdctl/containerd, or Docker is unavailable; skipping import."
+    fi
+
+    echo "2. Starting IncludeOS HTTP server with urunc..."
+    ${SUDO} nerdctl -n "${NAMESPACE}" run -d \
+        --name "${CONTAINER_NAME}" \
+        --runtime "${RUNTIME}" \
+        "${IMAGE}" >/dev/null
+
+    echo "3. Waiting for CNI IP address..."
+    SERVER_IP=$(wait_for_ip)
+    echo "   Server IP: ${SERVER_IP}"
+
+    echo "4. Waiting for HTTP response..."
+    RESPONSE=$(wait_for_http "http://${SERVER_IP}:${PORT}")
+    echo "   Response: ${RESPONSE}"
+
+    echo "5. Server logs:"
+    ${SUDO} nerdctl -n "${NAMESPACE}" logs "${CONTAINER_NAME}" || true
+
+    echo
+    echo "=== Networking test passed ==="
+}
+
+main "$@"
