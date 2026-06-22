@@ -28,17 +28,46 @@ Expected output:
 Hello, world!
 ```
 
-## Build the HTTP server image
+## Build the HTTP server image for urunc
+
+The Dockerfiles in this repository are only useful for host smoke builds. They
+produce normal Linux executables and must not be used as urunc validation
+images.
+
+For urunc, first build a real IncludeOS QEMU kernel at:
+
+```text
+http-server/build/includeos-http-server
+```
+
+Then package that prebuilt IncludeOS artifact with Bunny:
+
+```bash
+cd http-server
+IMAGE=shivansh1111/includeos-http-server:latest ./build-urunc-image.sh
+```
+
+The wrapper runs:
+
+```bash
+DOCKER_BUILDKIT=1 docker build -f bunnyfile -t shivansh1111/includeos-http-server:latest .
+```
+
+The `http-server/bunnyfile` packages the kernel and creates the urunc metadata:
+
+* `com.urunc.unikernel.binary=/.boot/kernel`
+* `com.urunc.unikernel.unikernelType=includeos`
+* `com.urunc.unikernel.hypervisor=qemu`
+* `com.urunc.unikernel.mountRootfs=false`
+
+Do not build the urunc test image with:
 
 ```bash
 docker build -t shivansh1111/includeos-http-server:latest http-server
 ```
 
-The `http-server/Dockerfile` adds the urunc labels required by the IncludeOS implementation:
-
-* `com.urunc.unikernel.binary=/app/build/includeos-http-server`
-* `com.urunc.unikernel.unikernelType=includeos`
-* `com.urunc.unikernel.hypervisor=qemu`
+That command uses the Ubuntu Dockerfile and starts
+`/app/build/includeos-http-server` as a normal Linux process.
 
 ## Run the HTTP server with urunc
 
@@ -55,6 +84,14 @@ Expected log line:
 ```text
 HTTP Server listening on 0.0.0.0:8080...
 ```
+
+Also verify that the host process is QEMU, not the application binary:
+
+```bash
+ps aux | grep -E 'qemu|solo5|includeos-http-server'
+```
+
+For the QEMU image, the running process should be `qemu-system-*`.
 
 ## Networking test
 

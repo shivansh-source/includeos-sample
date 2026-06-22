@@ -8,13 +8,6 @@ platforms:
 
 kernel:
   from: local
-  # IncludeOS bootloader (modify path as needed)
-  path: includeos-loader
-
-rootfs:
-  from: local
-  # Your compiled IncludeOS binary
-  path: includeos-sample
-  type: initrd
+  path: build/includeos-sample
 
 cmd: []

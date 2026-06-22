@@ -8,11 +8,6 @@ platforms:
 
 kernel:
   from: local
-  path: includeos-loader
-
-rootfs:
-  from: local
-  path: includeos-http-server
-  type: initrd
+  path: build/includeos-http-server
 
 cmd: []
