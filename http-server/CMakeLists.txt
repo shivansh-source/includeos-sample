@@ -1,7 +1,16 @@
-cmake_minimum_required(VERSION 3.10)
-project(includeos-http-server)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+cmake_minimum_required(VERSION 3.31.6)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-add_executable(includeos-http-server src/main.cpp)
+project(includeos_http_server)
+
+find_package(IncludeOS)
+include(os)
+
+set(SOURCES
+  src/main.cpp
+)
+
+os_add_executable(includeos_http_server "IncludeOS HTTP server" ${SOURCES})
+os_add_drivers(includeos_http_server virtionet)
+os_add_stdout(includeos_http_server default_stdout)

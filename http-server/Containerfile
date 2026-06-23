@@ -1,0 +1,10 @@
+#syntax=harbor.nbfc.io/nubificus/bunny:latest
+FROM scratch
+
+COPY build/includeos_http_server.elf.bin /.boot/kernel
+
+LABEL "com.urunc.unikernel.binary"="/.boot/kernel"
+LABEL "com.urunc.unikernel.cmdline"=""
+LABEL "com.urunc.unikernel.unikernelType"="includeos"
+LABEL "com.urunc.unikernel.hypervisor"="qemu"
+LABEL "com.urunc.unikernel.mountRootfs"="false"
